@@ -66,7 +66,7 @@ func (p *Player) MovePawn(to point.Point) error {
 	return nil
 }
 
-func (p *Player) getAvailableWall() *wall.Wall {
+func (p *Player) GetNextAvailableWall() *wall.Wall {
 	zero := point.Point{
 		X: 0,
 		Y: 0,
@@ -83,7 +83,7 @@ func (p *Player) MoveWall(p1, p2 point.Point) error {
 	if p == nil {
 		return errors.New("player cannot be nil")
 	}
-	wall := p.getAvailableWall()
+	wall := p.GetNextAvailableWall()
 	if wall == nil {
 		return errors.New("no more walls")
 	}

@@ -25,6 +25,7 @@ type Game struct {
 	Def     *GameDef
 	Players []*player.Player
 	Board   board.Board
+	moves   []move.Move
 }
 
 func (g *GameDef) CreateGame(title string, boardRowsColumns point.Point, players ...player.PlayerDef) (*Game, error) {
@@ -77,6 +78,15 @@ func (g *Game) GetAllWalls() []wall.Wall {
 	return walls
 }
 
+func (g Game) GetPlayer(player int) *player.Player {
+	for _, p := range g.Players {
+		if p.Num == player {
+			return p
+		}
+	}
+	return nil
+}
+
 func (g Game) PointIsOccupied(p point.Point) error {
 	for _, p := range g.Players {
 		if p.IsEqual(p.Point) {
@@ -99,6 +109,41 @@ func (g Game) MovePlayer(p *player.Player, moveInput move.Move) error {
 	}
 }
 
+func (g *Game) IsValidPawnMove(player player.Player, pawnMove pawn.Pawn) error {
+	if err := g.Board.IsValidPoint(pawnMove.Point); err != nil {
+		return fmt.Errorf("pawn has invalid point: %v", err)
+	}
+	if err := g.PointIsOccupied(pawnMove.Point); err != nil {
+		return err
+	}
+	subtractPoint := player.Point.Subtract(pawnMove.Point).Abs()
+	if !subtractPoint.Equals(point.Point{X: 1, Y: 0}, point.Point{X: 0, Y: 1}) {
+		return errors.New("pawn cannot move more than 1 space")
+	}
+	var mid1, mid2 point.Point
+	switch {
+	case player.IsMoveUp(pawnMove.Point):
+		mid1, mid2 = point.Point{X: player.X, Y: player.Y}, point.Point{X: player.X + 1, Y: player.Y}
+	case player.IsMoveDown(pawnMove.Point):
+		mid1, mid2 = point.Point{X: player.X, Y: player.Y - 1}, point.Point{X: player.X + 1, Y: player.Y - 1}
+	case player.IsMoveRight(pawnMove.Point):
+		mid1, mid2 = point.Point{X: player.X, Y: player.Y}, point.Point{X: player.X, Y: player.Y + 1}
+	case player.IsMoveLeft(pawnMove.Point):
+		mid1, mid2 = point.Point{X: player.X - 1, Y: player.Y}, point.Point{X: player.X - 1, Y: player.Y + 1}
+	}
+	walls := g.GetAllWalls()
+	for _, w := range walls {
+		if err := w.IsValid(); err != nil {
+			continue
+		}
+		midW := w.Midpoint()
+		if midW.Equals(mid1, mid2) {
+			return fmt.Errorf("wall %v is blocking", w)
+		}
+	}
+	return nil
+}
+
 func (g *Game) IsValidMove(moveInput move.Move) error {
 	err := fmt.Errorf("invalid move: %v", moveInput)
 	if moveInput.Pawn != nil {
@@ -108,7 +153,7 @@ func (g *Game) IsValidMove(moveInput move.Move) error {
 		if err := g.PointIsOccupied(moveInput.Pawn.Point); err != nil {
 			return err
 		}
-		// TODO: p.IsValidMove() // pawn can only move 1 square at a time. Pawn cannot move through walls.
+		g.IsValidPawnMove(*g.GetPlayer(moveInput.Player), *moveInput.Pawn)
 		return nil
 	}
 	if moveInput.Wall != nil {
@@ -132,6 +177,15 @@ func (g *Game) IsValidMove(moveInput move.Move) error {
 		return nil
 	}
 	return err
+}
+
+func (g Game) FindAllWallMoves(p player.Player) []wall.Wall {
+	wallMoves := []wall.Wall{}
+
+	wallPositions := g.GetAllWalls()
+	pawnPositions := g.Players
+
+	return wallMoves
 }
 
 func (g *Game) GetPlayerMoveInput() move.Move {

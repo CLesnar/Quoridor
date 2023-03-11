@@ -21,11 +21,17 @@ func (p Point) Distance(q Point) int {
 	return int(dist)
 }
 
-func (p *Point) IsEqual(q Point) bool {
-	if p == nil {
-		return false
-	}
+func (p Point) IsEqual(q Point) bool {
 	return p.X == q.X && p.Y == q.Y
+}
+
+func (p Point) Equals(points ...Point) bool {
+	for _, point := range points {
+		if !p.IsEqual(point) {
+			return false
+		}
+	}
+	return true
 }
 
 func Equal(points ...Point) bool {
@@ -45,6 +51,20 @@ func (p Point) Add(q Point) Point {
 	return Point{
 		X: p.X + q.X,
 		Y: p.Y + q.Y,
+	}
+}
+
+func (p Point) Subtract(q Point) Point {
+	return Point{
+		X: p.X - q.X,
+		Y: p.Y - q.Y,
+	}
+}
+
+func (p Point) Abs() Point {
+	return Point{
+		X: int(math.Abs(float64(p.X))),
+		Y: int(math.Abs(float64(p.Y))),
 	}
 }
 
