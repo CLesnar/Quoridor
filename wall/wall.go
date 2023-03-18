@@ -1,6 +1,7 @@
 package wall
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"quoridor/point"
@@ -12,8 +13,15 @@ type WallDef struct {
 }
 
 type Wall struct {
-	P1 point.Point
-	P2 point.Point
+	P1 point.Point `json:"point1"`
+	P2 point.Point `json:"point2"`
+}
+
+func (w Wall) String() string {
+	if wBytes, err := json.Marshal(w); err == nil {
+		return string(wBytes)
+	}
+	return ""
 }
 
 func (w *Wall) Move(p, q point.Point) error {

@@ -1,7 +1,7 @@
 package point
 
 import (
-	"fmt"
+	"encoding/json"
 	"math"
 )
 
@@ -11,7 +11,10 @@ type Point struct {
 }
 
 func (p Point) String() string {
-	return fmt.Sprintf("%d,%d", p.X, p.Y)
+	if pBytes, err := json.Marshal(p); err == nil {
+		return string(pBytes)
+	}
+	return ""
 }
 
 func (p Point) Distance(q Point) int {
@@ -80,4 +83,15 @@ func (p Point) Copy() Point {
 		X: p.X,
 		Y: p.Y,
 	}
+}
+
+func CreatePointMap(start Point, end Point) map[string]Point {
+	pointMap := map[string]Point{}
+	for x := start.X; x < end.X; x++ {
+		for y := start.Y; y < end.Y; y++ {
+			p := Point{X: x, Y: y}
+			pointMap[p.String()] = p
+		}
+	}
+	return pointMap
 }

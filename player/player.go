@@ -10,13 +10,14 @@ import (
 )
 
 type PlayerDef struct {
-	pawn.PawnDef `json:"-,"`
-	Name         string      `json:"name"`
-	Start        point.Point `json:"start"`
-	Winning      point.Point `json:"winning"`
-	Num          int         `json:"number"`
-	Walls        int         `json:"walls"`
-	Symbol       string      `json:"symbol"`
+	pawn.PawnDef  `json:"-,"`
+	Name          string      `json:"name"`
+	Start         point.Point `json:"start"`
+	WinningRow    *int        `json:"winningRow,omitempty"`
+	WinningColumn *int        `json:"winningColumn,omitempty"`
+	Num           int         `json:"number"`
+	Walls         int         `json:"walls"`
+	Symbol        string      `json:"symbol"`
 }
 
 type Player struct {
@@ -42,6 +43,15 @@ func (p *PlayerDef) CreatePlayer() (*Player, error) {
 		Walls: walls,
 	}
 	return player, nil
+}
+
+func (p Player) GetMovePlayer() move.MovePlayer {
+	return move.MovePlayer{
+		PlayerNum:     p.Num,
+		Name:          p.Name,
+		WinningRow:    p.WinningRow,
+		WinningColumn: p.WinningColumn,
+	}
 }
 
 func (p Player) GetPawnMove() *move.Move {
@@ -92,7 +102,7 @@ func (p *Player) MoveWall(p1, p2 point.Point) error {
 }
 
 func (p Player) HasWon() bool {
-	return (p.Winning.X > 0 && p.X == p.Winning.X) || (p.Winning.Y > 0 && p.Y == p.Winning.Y)
+	return (p.WinningRow != nil && p.X == *p.WinningRow) || (p.WinningColumn != nil && p.Y == *p.WinningColumn)
 }
 
 func (p Player) PlayerStr() string {

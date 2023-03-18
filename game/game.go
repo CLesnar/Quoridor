@@ -10,6 +10,7 @@ import (
 	"quoridor/pawn"
 	"quoridor/player"
 	"quoridor/point"
+	"quoridor/square"
 	"quoridor/wall"
 )
 
@@ -21,11 +22,11 @@ type GameDef struct {
 }
 
 type Game struct {
-	Title   string
-	Def     *GameDef
-	Players []*player.Player
-	Board   board.Board
-	moves   []move.Move
+	Title   string           `json:"title"`
+	Def     *GameDef         `json:"definition"`
+	Players []*player.Player `json:"players"`
+	Board   board.Board      `json:"board"`
+	History move.History     `json:"history"`
 }
 
 func (g *GameDef) CreateGame(title string, boardRowsColumns point.Point, players ...player.PlayerDef) (*Game, error) {
@@ -70,6 +71,28 @@ func (g *Game) Start() {
 	}
 }
 
+func (g Game) MovePlayer(p *player.Player, moveInput move.Move) error {
+	if p == nil {
+		return errors.New("player cannot be nil")
+	}
+	switch {
+	case moveInput.Pawn != nil:
+		if err := p.MovePawn(moveInput.Pawn.Point); err != nil {
+			return fmt.Errorf("failed to move player %s: %v", p.String(), err)
+		}
+		g.Board.MovePawn(p.Prev, p.Point)
+		return nil
+	case moveInput.Wall != nil:
+		if err := p.MoveWall(moveInput.Wall.P1, moveInput.Wall.P2); err != nil {
+			return fmt.Errorf("failed to place player %s wall: %v", p.String(), err)
+		}
+		g.Board.PlaceWall(*moveInput.Wall)
+		return nil
+	default:
+		return fmt.Errorf("failed to move player %s: invalid move: %v", p.PlayerStr(), moveInput)
+	}
+}
+
 func (g *Game) GetAllWalls() []wall.Wall {
 	walls := []wall.Wall{}
 	for _, p := range g.Players {
@@ -94,19 +117,6 @@ func (g Game) PointIsOccupied(p point.Point) error {
 		}
 	}
 	return nil
-}
-
-func (g Game) MovePlayer(p *player.Player, moveInput move.Move) error {
-	if p == nil {
-		return errors.New("player cannot be nil")
-	}
-	if moveInput.Pawn != nil {
-		return p.MovePawn(moveInput.Pawn.Point)
-	} else if moveInput.Wall != nil {
-		return p.MoveWall(moveInput.Wall.P1, moveInput.Wall.P2)
-	} else {
-		return fmt.Errorf("failed to move player %s: invalid move: %v", p.PlayerStr(), moveInput)
-	}
 }
 
 func (g *Game) IsValidPawnMove(player player.Player, pawnMove pawn.Pawn) error {
@@ -148,7 +158,7 @@ func (g *Game) IsValidMove(moveInput move.Move) error {
 	err := fmt.Errorf("invalid move: %v", moveInput)
 	if moveInput.Pawn != nil {
 		if err := g.Board.IsValidPoint(moveInput.Pawn.Point); err != nil {
-			return fmt.Errorf("pawn has invalid point: %v", err)
+			return fmt.Errorf("invalid move %v: %v", moveInput, err)
 		}
 		if err := g.PointIsOccupied(moveInput.Pawn.Point); err != nil {
 			return err
@@ -179,15 +189,6 @@ func (g *Game) IsValidMove(moveInput move.Move) error {
 	return err
 }
 
-func (g Game) FindAllWallMoves(p player.Player) []wall.Wall {
-	wallMoves := []wall.Wall{}
-
-	wallPositions := g.GetAllWalls()
-	pawnPositions := g.Players
-
-	return wallMoves
-}
-
 func (g *Game) GetPlayerMoveInput() move.Move {
 	m := move.Move{}
 	return m
@@ -198,14 +199,95 @@ func (g *Game) EndGame(p *player.Player) {
 	os.Exit(0) // or restart
 }
 
-func (g *Game) IsPointOccupied(p point.Point) (bool, error) {
-	if g == nil {
-		return false, errors.New("game cannot be nil")
-	}
-	for _, player := range g.Players {
-		if player.IsEqual(p) {
-			return true, nil
+func (g Game) GetValidPawnMovesInDirection(player int, p point.Point, direction board.Direction) []move.Move {
+	moves := []move.Move{}
+	var squareToCheck, toSquare *square.Square
+	var wallIsBlocking bool
+	switch direction {
+	case board.North:
+		squareToCheck = g.Board.GetSquare(p)
+		if squareToCheck == nil {
+			return moves
 		}
+		wallIsBlocking = squareToCheck.HasWall == square.HasWallHorizontal
+		toSquare = g.Board.GetSquareNorth(p)
+		if toSquare == nil {
+			return moves
+		}
+	case board.South:
+		squareToCheck = g.Board.GetSquareSouth(p)
+		if squareToCheck == nil {
+			return moves
+		}
+		wallIsBlocking = squareToCheck.HasWall == square.HasWallHorizontal
+		toSquare = squareToCheck
+	case board.East:
+		squareToCheck = g.Board.GetSquare(p)
+		if squareToCheck == nil {
+			return moves
+		}
+		wallIsBlocking = squareToCheck.HasWall == square.HasWallVertical
+		toSquare = g.Board.GetSquareEast(p)
+		if toSquare == nil {
+			return moves
+		}
+	case board.West:
+		squareToCheck = g.Board.GetSquareWest(p)
+		if squareToCheck == nil {
+			return moves
+		}
+		wallIsBlocking = squareToCheck.HasWall == square.HasWallVertical
+		toSquare = squareToCheck
+	default:
+		return moves
 	}
-	return false, nil
+
+	if wallIsBlocking {
+		return moves
+	}
+
+	if toSquare.IsOccupied {
+		// Special cases for jumping
+		threeSquares := g.Board.GetThreeSquaresDirection(*toSquare, direction)
+		sq := g.Board.GetSquareDirection(*toSquare, direction)
+		if sq != nil {
+			if DirectionPerpendiculartoWall(direction, *sq) {
+				delete(threeSquares, sq.String())
+				var dir board.Direction
+				for _, v := range threeSquares {
+					switch direction {
+					case board.North, board.South:
+						if v.X < sq.X {
+							dir = board.East
+						} else if v.X > sq.X {
+							dir = board.West
+						}
+					case board.East, board.West:
+						if v.Y < sq.Y {
+							dir = board.South
+						} else if v.Y > sq.Y {
+							dir = board.North
+						}
+					default:
+						continue
+					}
+					moves = append(moves, g.GetValidPawnMovesInDirection(player, v.Point, dir)...)
+				}
+			} else {
+				moves = append(moves, g.GetValidPawnMovesInDirection(player, sq.Point, direction)...)
+			}
+		}
+	} else {
+		moves = append(moves, move.Move{Player: player, Pawn: &pawn.Pawn{Point: point.Point{X: toSquare.X, Y: toSquare.Y}}})
+	}
+
+	return moves
+}
+
+func DirectionPerpendiculartoWall(dir board.Direction, sq square.Square) bool {
+	if (sq.HasWall == square.HasWallHorizontal && (dir == board.North || dir == board.South)) ||
+		(sq.HasWall == square.HasWallVertical && (dir == board.East || dir == board.West)) {
+		return true
+	}
+	return false
 }
