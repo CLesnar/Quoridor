@@ -199,6 +199,7 @@ func (g *Game) EndGame(p *player.Player) {
 	os.Exit(0) // or restart
 }
 
+// TODO: will be used to compare against a new player's move - thus verification of a move
 func (g Game) GetValidPawnMovesInDirection(player int, p point.Point, direction board.Direction) []move.Move {
 	moves := []move.Move{}
 	var squareToCheck, toSquare *square.Square
